@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+<form action="/" method="post">
+  <div class="form-group">
+    <label for="text">Enter Text</label>
+    <input class="form-control" name="text" id="text" aria-describedby="emailHelp" placeholder="The food was good" value="{{text}}">
+    <small id="help" class="form-text text-muted">Text should have some sentiment</small>
+  </div>
+  <button type="submit" class="btn btn-primary">Submit</button>
+</form>
+
+
+<div class="well well-large" id='results'>
+{{exp|safe}}
+</div>
+{% endblock %}
