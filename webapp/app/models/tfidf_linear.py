@@ -1,4 +1,4 @@
-from torchtext.data.utils import get_tokenizer
+
 from joblib import dump, load
 from lime.lime_text import LimeTextExplainer
 from lime import lime_text
@@ -7,13 +7,14 @@ import os
 
 
 class TfidfModel:
-    def __init__(self):
+    def __init__(self, tokenizer, num_features):
         super().__init__()
-        # The pipline has the tokenizer saved in vectorizer but I still need this for lime
-        self.tokenize=get_tokenizer('basic_english')
+        self.num_features = num_features
+        self.tokenizer = tokenizer
         self.pipeline = load(Path(os.getcwd()+'/app/models/binaries'+'/tfidf_pipeline.joblib')) 
         self.explainer = LimeTextExplainer(class_names=['Negative','Positive'])
     def get_lime_exp(self, text):
-        text = ' '.join(self.tokenize(text))
-        exp = self.explainer.explain_instance(text, self.pipeline.predict_proba, num_features=6)
+        # The pipline vectorizer already contains the tokenizer but I want lime to see the same tokens to train its model
+        text = ' '.join(self.tokenizer(text))
+        exp = self.explainer.explain_instance(text, self.pipeline.predict_proba, num_features=self.num_features)
         return exp.as_html()

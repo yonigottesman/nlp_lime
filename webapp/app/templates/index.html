@@ -12,7 +12,19 @@
 </form>
 
 
+
+
+<br>
+<br>
+
 <div class="well well-large" id='results'>
-{{exp|safe}}
+{% for result in results %}
+<h2 class="text-center">{{result.title}}</h2>
+{{result.exp|safe}}
+<br>
+{% endfor %}
 </div>
+
+
+
 {% endblock %}
