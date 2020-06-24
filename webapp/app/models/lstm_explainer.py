@@ -80,7 +80,7 @@ class Predict:
 
   
 
-class LSTMModel:
+class LSTMExplainer:
     def __init__(self, tokenizer, num_features):
         super().__init__()
         self.TEXT = torch.load(os.getcwd()+'/app/models/binaries'+'/text_field.ptz')
