@@ -20,8 +20,11 @@ import numpy as np
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 bs = 256
 
+def bn_dropout_fc(in_features, out_features, dropout_p=0.5):
+    return [nn.BatchNorm1d(in_features), nn.Dropout(dropout_p), nn.Linear(in_features, out_features)]
+
 class NNet(nn.Module):
-    def __init__(self,embeddings, embedding_dim, output_dim, pad_idx, lstm_hidden_size):
+    def __init__(self,embeddings, embedding_dim, output_dim, pad_idx, lstm_hidden_size, fc_hidden):
         super().__init__()
         self.embeddings = nn.Embedding.from_pretrained(embeddings, freeze=False, padding_idx=pad_idx)
         self.dropout = nn.Dropout(0.5)
@@ -31,23 +34,22 @@ class NNet(nn.Module):
                             bidirectional=True,dropout=0.0)
 
         self.fc = nn.Sequential(
-            nn.BatchNorm1d(lstm_hidden_size * 2),
-            nn.Dropout(0.5),
-            nn.Linear(lstm_hidden_size * 2, 50),
+            *bn_dropout_fc(lstm_hidden_size * 2, fc_hidden[0]),
             nn.ReLU(),
-
-            nn.BatchNorm1d(50),
-            nn.Dropout(0.5),
-            nn.Linear(50, output_dim)
+            *bn_dropout_fc(fc_hidden[0], fc_hidden[1]),
+            nn.ReLU(),
+            *bn_dropout_fc(fc_hidden[1], output_dim)
         )
 
 
     def forward(self, input, input_lengths):
-        a1 = self.dropout(self.embeddings(input))
+        a1 = self.dropout(self.embeddings(input.to(device)))
 
         packed_embeddings = nn.utils.rnn.pack_padded_sequence(a1, input_lengths,enforce_sorted=False)
         packed_output, (hidden, cell) = self.lstm(packed_embeddings,) 
         hidden = self.dropout(torch.cat((hidden[-2,:,:], hidden[-1,:,:]), dim = 1))
+        
+        output,output_lengths = nn.utils.rnn.pad_packed_sequence(packed_output)
         return self.fc(hidden)
 
 
@@ -84,13 +86,17 @@ class LSTMExplainer:
     def __init__(self, tokenizer, num_features):
         super().__init__()
         self.TEXT = torch.load(os.getcwd()+'/app/models/binaries'+'/text_field.ptz')
-        embedding_size = 100
-        lstm_hidden=200
+        embedding_size = 300
 
+
+        lstm_hidden=200
+        fc_hidden = [100,50]
         self.model = NNet(self.TEXT.vocab.vectors,
-                   embedding_size, 2,
+                   embedding_size,
+                   2,
                    self.TEXT.vocab.stoi[self.TEXT.pad_token],
-                   lstm_hidden).to(device)
+                   lstm_hidden,fc_hidden).to(device)
+        
         self.model.load_state_dict(torch.load(os.getcwd()+'/app/models/binaries'+'/rnn_model.pt',map_location=device)) # TODO change to Path
         self.predict = Predict(self.model,self.TEXT)
         self.explainer = LimeTextExplainer(class_names=['Negative','Positive'])
