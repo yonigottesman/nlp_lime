@@ -4,41 +4,44 @@ from transformers import Trainer, TrainingArguments, BertTokenizerFast
 import os
 from lime.lime_text import LimeTextExplainer
 from lime import lime_text
+from transformers import BertForSequenceClassification
+from nlp import Dataset
+import torch as torch
+from tqdm import tqdm
 
 
 class Predict:
-  def __init__(self, model, labels, tokenizer, trainer):
+  def __init__(self, model, tokenizer):
     self.model = model
-    self.labels = labels
+    self.model.eval()
     self.tokenizer = tokenizer
-    self.trainer = trainer
+    self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
   def __call__(self, examples):
-    examples = [InputExample(guid=i, text_a=text,label=1) for
-                i,text in enumerate(examples)] # just use 1 as label it will be ignored
-    processor = SingleSentenceClassificationProcessor(labels=self.labels,examples=examples)
-    features = processor.get_features(self.tokenizer,return_tensors=None)
-    return self.trainer.predict(test_dataset=features).predictions
+    ds = Dataset.from_dict({'text':examples})
+    ds = ds.map(lambda batch: self.tokenizer(batch['text'], truncation=True, padding='max_length'), batched=True, batch_size=512)
+    ds.set_format('torch', columns=['input_ids','token_type_ids', 'attention_mask'])
+    dataloader = torch.utils.data.DataLoader(ds, batch_size=16)
+    res = []
+    for batch in tqdm(dataloader):
+      batch = {k: v.to(self.device) for k, v in batch.items()}
+      outputs = self.model(**batch)
+      res.append(outputs[0].softmax(1).detach().cpu())
+    return torch.cat(res,dim=0).numpy()
+
 
 class BertExplainer:
     def __init__(self, num_features):
         super().__init__()
-        # For sure I don't need this and can get from config
-        labels=[1,2]
-        bert_model_path=os.getcwd()+'/app/models/binaries'+'/bert-base-uncased/'
-        config = AutoConfig.from_pretrained(bert_model_path+'/model', num_labels=len(labels))
-        model = AutoModelForSequenceClassification.from_pretrained(bert_model_path+'/model', config=config)
-        self.tokenizer = BertTokenizerFast.from_pretrained(bert_model_path+'/tokenizer')   
-        
-        # Not done here for training just to get be able to batch the lime examples and predict easily
-        training_args = TrainingArguments(output_dir='/tmp/')
-        trainer = Trainer(model=model, args=training_args)
+        bert_model_path=os.getcwd()+'/app/models/binaries'+'/bert_saved_model/'
+        model = BertForSequenceClassification.from_pretrained(bert_model_path)       
+        tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased',model_max_length=256)
         
         self.explainer = LimeTextExplainer(class_names=['Negative','Positive'])
-        self.predict = Predict(model,labels,self.tokenizer,trainer)
+        self.predict = Predict(model,tokenizer)
         self.num_features = num_features
         
     def get_lime_exp(self, text):
        
-        text = ' '.join(self.tokenizer.tokenize(text))
-        exp = self.explainer.explain_instance(text, self.predict, num_features=self.num_features)
+        exp = self.explainer.explain_instance(text, self.predict, num_features=self.num_features, num_samples=500)
         return exp.as_html(text=True)

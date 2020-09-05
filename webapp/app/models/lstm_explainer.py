@@ -105,5 +105,5 @@ class LSTMExplainer:
     def get_lime_exp(self, text):
        
         text = ' '.join(self.tokenizer(text))
-        exp = self.explainer.explain_instance(text, self.predict, num_features=self.num_features,top_labels=2)
+        exp = self.explainer.explain_instance(text, self.predict, num_features=self.num_features,top_labels=2, num_samples=500)
         return exp.as_html(text=True,labels=(1,))

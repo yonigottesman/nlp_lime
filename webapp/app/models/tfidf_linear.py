@@ -16,5 +16,5 @@ class TfidfModel:
     def get_lime_exp(self, text):
         # The pipline vectorizer already contains the tokenizer but I want lime to see the same tokens to train its model
         text = ' '.join(self.tokenizer(text))
-        exp = self.explainer.explain_instance(text, self.pipeline.predict_proba, num_features=self.num_features)
+        exp = self.explainer.explain_instance(text, self.pipeline.predict_proba, num_features=self.num_features, num_samples=500)
         return exp.as_html()
